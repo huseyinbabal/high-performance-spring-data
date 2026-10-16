@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: ticketrush
+  datasource:
+    # reWriteBatchedInserts: the driver folds a JDBC batch into multi-row INSERTs
+    url: jdbc:postgresql://localhost:5440/ticketrush?reWriteBatchedInserts=true
+    username: ticketrush
+    password: ticketrush
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 3000      # fail in 3 s instead of queueing for the default 30 s
+  jpa:
+    open-in-view: false             # no DB connection held while the response is rendered
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        session_factory.statement_inspector: com.ticketrush.support.SqlCounter
+        jdbc.batch_size: 100
+        order_inserts: true
+
+ticketrush:
+  payment:
+    latency-ms: 150                 # the "payment gateway" every purchase waits on
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+
+logging:
+  level:
+    org.hibernate.SQL: ${SQL_LOG:off}   # make run SQL=debug → print every statement

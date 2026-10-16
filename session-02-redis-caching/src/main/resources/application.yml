@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: ticketrush
+  datasource:
+    url: jdbc:postgresql://localhost:5440/ticketrush?reWriteBatchedInserts=true
+    username: ticketrush
+    password: ticketrush
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 3000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        session_factory.statement_inspector: com.ticketrush.support.SqlCounter
+        jdbc.batch_size: 100
+        order_inserts: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  cache:
+    type: redis
+
+ticketrush:
+  payment:
+    latency-ms: 150
+  cache:
+    event-ttl: 10m          # static event info: long TTL + explicit eviction on change
+    trending-ttl: 5s        # short on purpose, so we can watch it expire under load
+  hold:
+    ttl: 2m                 # how long a buyer may keep tickets in the basket
+  rate-limit:
+    holds-per-minute: 5
+  lock-demo:
+    work-ms: 2              # time between "read" and "write" in the lock demo's critical section
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+
+logging:
+  level:
+    org.hibernate.SQL: ${SQL_LOG:off}
