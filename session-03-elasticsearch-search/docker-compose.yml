@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:18
+    # pg_stat_statements = "which queries cost us the most?" — the first tool of the course
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "max_connections=200"]
+    environment:
+      POSTGRES_DB: ticketrush
+      POSTGRES_USER: ticketrush
+      POSTGRES_PASSWORD: ticketrush
+    ports:
+      - "5440:5432"          # 5440 on the host — 5432 is usually taken
+    volumes:
+      - ./db:/docker-entrypoint-initdb.d:ro   # schema + ~1.6M seed rows on first start
+    healthcheck:
+      test: ["CMD-SHELL", "psql -U ticketrush -d ticketrush -tc 'select 1 from seed_done' | grep -q 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+
+  redis:
+    image: redis:8
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.4.2
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"       # local demo only
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      # laptops with a >90% full Docker disk would otherwise refuse to allocate the index
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s localhost:9200/_cluster/health | grep -q -E 'green|yellow'"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.4.2
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      TELEMETRY_OPTIN: "false"
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s localhost:5601/api/status | grep -q '\"level\":\"available\"'"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
