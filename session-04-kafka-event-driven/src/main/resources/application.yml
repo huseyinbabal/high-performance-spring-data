@@ -1,0 +1,60 @@
+spring:
+  application:
+    name: ticketrush
+  datasource:
+    url: jdbc:postgresql://localhost:5442/ticketrush?reWriteBatchedInserts=true
+    username: ticketrush
+    password: ticketrush
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 3000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        session_factory.statement_inspector: com.ticketrush.support.SqlCounter
+        jdbc.batch_size: 100
+        order_inserts: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  cache:
+    type: redis
+  elasticsearch:
+    uris: http://localhost:9200
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      acks: all                       # with enable.idempotence (default): no loss, no duplicates from retries
+      compression-type: lz4
+      properties:
+        linger.ms: 5                  # wait 5 ms to fill a batch instead of one request per record
+    consumer:
+      auto-offset-reset: earliest
+      max-poll-records: 500
+
+ticketrush:
+  payment:
+    latency-ms: 150
+  cache:
+    event-ttl: 10m          # static event info: long TTL + explicit eviction on change
+    trending-ttl: 30s
+  hold:
+    ttl: 2m                 # how long a buyer may keep tickets in the basket
+  rate-limit:
+    holds-per-minute: 5
+  outbox:
+    batch-size: 500
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+
+logging:
+  level:
+    org.hibernate.SQL: ${SQL_LOG:off}
