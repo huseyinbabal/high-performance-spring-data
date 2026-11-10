@@ -69,6 +69,10 @@ server:
   shutdown: graceful                       # finish in-flight requests before the JVM exits
 
 management:
+  otlp:
+    metrics:
+      export:
+        enabled: false                     # metrics are scraped by Prometheus; OTLP is only for traces (→ Tempo)
   endpoints:
     web:
       exposure:
