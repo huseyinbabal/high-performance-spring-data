@@ -14,4 +14,4 @@ resources:
 images:
   - name: ticketrush
     newName: ghcr.io/huseyinbabal/ticketrush
-    newTag: 4306434
+    newTag: ad8c2b1
