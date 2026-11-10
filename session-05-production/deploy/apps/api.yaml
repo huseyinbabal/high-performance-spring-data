@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: ticketrush-api
 spec:
-  replicas: 3
+  replicas: 5
   selector:
     matchLabels: { app: ticketrush, role: api }
   template:
