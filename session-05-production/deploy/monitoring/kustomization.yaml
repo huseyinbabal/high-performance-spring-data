@@ -1,0 +1,17 @@
+# Monitoring pool: metrics (Prometheus), logs (Loki, shipped by Alloy), traces (Tempo, OTLP from the app), Grafana.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+resources:
+  - namespace.yaml
+  - repositories.yaml
+  - kube-prometheus-stack.yaml
+  - loki.yaml
+  - tempo.yaml
+  - alloy.yaml
+configMapGenerator:
+  - name: ticketrush-dashboard       # Grafana's sidecar loads every ConfigMap labelled grafana_dashboard=1
+    files: [dashboards/ticketrush.json]
+    options:
+      labels: { grafana_dashboard: "1" }
+      disableNameSuffixHash: true

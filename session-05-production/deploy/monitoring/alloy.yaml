@@ -1,0 +1,63 @@
+# Alloy ships every pod's stdout to Loki. It tails through the Kubernetes API, so ONE replica covers all nodes.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: alloy
+spec:
+  interval: 30m
+  timeout: 10m
+  dependsOn: [{ name: loki }]
+  chart:
+    spec:
+      chart: alloy
+      version: 1.15.0
+      sourceRef: { kind: HelmRepository, name: grafana }
+  values:
+    fullnameOverride: alloy
+    controller:
+      type: deployment
+      replicas: 1
+      nodeSelector: { pool: monitoring }
+      tolerations: [{ key: pool, operator: Equal, value: monitoring, effect: NoSchedule }]
+    alloy:
+      configMap:
+        content: |
+          discovery.kubernetes "pods" {
+            role = "pod"
+          }
+          discovery.relabel "pods" {
+            targets = discovery.kubernetes.pods.targets
+            rule {
+              source_labels = ["__meta_kubernetes_namespace"]
+              target_label  = "namespace"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_name"]
+              target_label  = "pod"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_container_name"]
+              target_label  = "container"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app"]
+              target_label  = "app"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_role"]
+              target_label  = "role"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_node_name"]
+              target_label  = "node"
+            }
+          }
+          loki.source.kubernetes "pods" {
+            targets    = discovery.relabel.pods.output
+            forward_to = [loki.write.default.receiver]
+          }
+          loki.write "default" {
+            endpoint {
+              url = "http://loki.monitoring:3100/loki/api/v1/push"
+            }
+          }

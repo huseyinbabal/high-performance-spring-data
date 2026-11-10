@@ -1,0 +1,58 @@
+# Hot standby: copies the primary once (pg_basebackup), then follows its WAL stream.
+# The app sends every @Transactional(readOnly = true) here.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-replica
+spec:
+  selector: { app: postgres-replica }
+  ports: [{ port: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-replica
+spec:
+  serviceName: postgres-replica
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres-replica }
+  template:
+    metadata:
+      labels: { app: postgres-replica }
+    spec:
+      securityContext: { runAsUser: 999, runAsGroup: 999, fsGroup: 999 }   # the postgres user of the image
+      initContainers:
+        - name: wait-for-seed           # copy the primary only once it holds the full data set
+          image: postgres:18
+          env: [{ name: PGPASSWORD, value: ticketrush }]
+          command: ["sh", "-c", "until psql -h postgres -U ticketrush -d ticketrush -tc 'select 1 from seed_done' 2>/dev/null | grep -q 1; do echo waiting for the primary seed; sleep 5; done"]
+      containers:
+        - name: postgres
+          image: postgres:18
+          env:
+            - { name: PGDATA, value: /var/lib/postgresql/replica }
+            - { name: PGPASSWORD, value: replicator }
+          command:
+            - bash
+            - -c
+            - |
+              if [ ! -s "$PGDATA/PG_VERSION" ]; then
+                pg_basebackup -h postgres -U replicator -D "$PGDATA" -R -X stream
+                chmod 700 "$PGDATA"
+              fi
+              exec postgres -c shared_preload_libraries=pg_stat_statements -c max_connections=200
+          ports: [{ containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["sh", "-c", "psql -U ticketrush -d ticketrush -tc 'select pg_is_in_recovery()' | grep -q t"] }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 2Gi }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 5Gi } }

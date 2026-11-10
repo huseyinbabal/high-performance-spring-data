@@ -1,0 +1,17 @@
+{
+  "dynamic": "strict",
+  "properties": {
+    "id":          { "type": "long" },
+    "name":        { "type": "text", "analyzer": "folded", "copy_to": "all",
+                     "fields": { "suggest": { "type": "search_as_you_type", "analyzer": "folded" } } },
+    "artist":      { "type": "text", "analyzer": "folded", "copy_to": "all" },
+    "venue":       { "type": "text", "analyzer": "folded", "copy_to": "all" },
+    "description": { "type": "text", "analyzer": "folded", "copy_to": "all" },
+    "category":    { "type": "keyword", "copy_to": "all" },
+    "city":        { "type": "keyword", "copy_to": "all" },
+    "status":      { "type": "keyword" },
+    "startsAt":    { "type": "date" },
+    "minPrice":    { "type": "scaled_float", "scaling_factor": 100 },
+    "all":         { "type": "text", "analyzer": "folded" }
+  }
+}

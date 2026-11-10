@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector: { app: postgres }
+  ports: [{ port: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18
+          # pg_stat_statements = "which queries cost us the most?" — the first tool of the course
+          args: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "max_connections=200"]
+          env:
+            - { name: POSTGRES_DB, value: ticketrush }
+            - { name: POSTGRES_USER, value: ticketrush }
+            - { name: POSTGRES_PASSWORD, value: ticketrush }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe:               # ready only after the seed finished (the last init script writes seed_done)
+            exec: { command: ["sh", "-c", "psql -U ticketrush -d ticketrush -tc 'select 1 from seed_done' | grep -q 1"] }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { memory: 2Gi }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql }
+            - { name: initdb, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+      volumes:
+        - name: initdb
+          configMap: { name: postgres-initdb }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 5Gi } }

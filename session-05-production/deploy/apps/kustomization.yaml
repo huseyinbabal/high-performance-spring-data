@@ -1,0 +1,17 @@
+# App pool: ONE image, TWO roles.
+#   ticketrush-api     serves HTTP. No Kafka consumers, no outbox relay. Scale it for request load.
+#   ticketrush-worker  runs the consumers and the relay. Scale it for consumer lag.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ticketrush
+resources:
+  - namespace.yaml
+  - config.yaml
+  - api.yaml
+  - worker.yaml
+  - monitoring.yaml
+# GitHub Actions builds the image and rewrites newTag below; Flux sees the commit and rolls the pods.
+images:
+  - name: ticketrush
+    newName: ghcr.io/huseyinbabal/ticketrush
+    newTag: dev

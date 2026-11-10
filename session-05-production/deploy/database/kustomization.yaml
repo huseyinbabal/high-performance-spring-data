@@ -1,0 +1,23 @@
+# Database pool: everything stateful. Each workload carries the same nodeSelector + toleration (patched in below).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: database
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - postgres-replica.yaml
+  - redis.yaml
+  - elasticsearch.yaml
+  - kafka.yaml
+configMapGenerator:
+  - name: postgres-initdb            # replication role + schema + ~1.6M seed rows, run on the primary's first start
+    files: [initdb/00-replication.sh, initdb/01-schema.sql, initdb/02-seed.sql]
+patches:
+  - target: { kind: StatefulSet }
+    patch: |-
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value: { pool: database }
+      - op: add
+        path: /spec/template/spec/tolerations
+        value: [{ key: pool, operator: Equal, value: database, effect: NoSchedule }]

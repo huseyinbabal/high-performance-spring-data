@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ticketrush-worker
+spec:
+  # No `replicas` here on purpose: Flux would undo every `make scale-workers` on its next sync.
+  # Git owns the image and the config; the replica count of the workers is an operational decision.
+  selector:
+    matchLabels: { app: ticketrush, role: worker }
+  template:
+    metadata:
+      labels: { app: ticketrush, role: worker }
+    spec:
+      nodeSelector: { pool: app }
+      topologySpreadConstraints:          # spread the replicas over both app nodes
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: ticketrush, role: worker }
+      terminationGracePeriodSeconds: 40
+      containers:
+        - name: app
+          image: ticketrush
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: ticketrush } }]
+          env:
+            - { name: TICKETRUSH_WORKERS_ENABLED, value: "true" }
+            # 4 payment consumers per pod: 12 partitions are fully used at 3 worker pods
+            - { name: TICKETRUSH_PAYMENTS_CONCURRENCY, value: "4" }
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { memory: 1Gi }        # request = limit: the pod is never evicted for memory it was promised
+          startupProbe:                       # give the JVM time to start before liveness counts
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            periodSeconds: 3
+            failureThreshold: 40
+          readinessProbe:                     # not ready → no traffic. Checks PostgreSQL, Redis, Elasticsearch
+            httpGet: { path: /actuator/health/readiness, port: 8080 }
+            periodSeconds: 3
+          livenessProbe:                      # not alive → restart. Never checks a dependency
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            periodSeconds: 10
+          lifecycle:
+            preStop:                          # let the Service stop routing here before the app starts shutting down
+              exec: { command: ["sleep", "5"] }

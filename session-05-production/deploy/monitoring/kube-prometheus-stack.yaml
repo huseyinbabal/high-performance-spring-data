@@ -1,0 +1,100 @@
+# Prometheus Operator + Prometheus + Grafana + kube-state-metrics + node-exporter.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+spec:
+  interval: 30m
+  timeout: 10m
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: 93.1.1
+      sourceRef: { kind: HelmRepository, name: prometheus-community }
+  install:
+    crds: CreateReplace
+  upgrade:
+    crds: CreateReplace
+  values:
+    fullnameOverride: kps
+    alertmanager: { enabled: false }
+    # kind does not expose these control-plane endpoints; scraping them only produces "down" targets
+    kubeEtcd: { enabled: false }
+    kubeControllerManager: { enabled: false }
+    kubeScheduler: { enabled: false }
+    kubeProxy: { enabled: false }
+    prometheusOperator:
+      # v0.95.1 (the chart default) was published for amd64 only; v0.94.0 also runs on arm64 (Apple Silicon kind)
+      image: { tag: v0.94.0 }
+      prometheusConfigReloader:
+        image: { tag: v0.94.0 }
+      nodeSelector: { pool: monitoring }
+      tolerations: [{ key: pool, operator: Equal, value: monitoring, effect: NoSchedule }]
+      admissionWebhooks:
+        patch:
+          nodeSelector: { pool: monitoring }
+          tolerations: [{ key: pool, operator: Equal, value: monitoring, effect: NoSchedule }]
+    kube-state-metrics:
+      nodeSelector: { pool: monitoring }
+      tolerations: [{ key: pool, operator: Equal, value: monitoring, effect: NoSchedule }]
+    prometheus-node-exporter:
+      tolerations: [{ operator: Exists }]          # one per node, every pool
+    prometheus:
+      service:
+        type: NodePort
+        nodePort: 30909                             # localhost:9091
+      prometheusSpec:
+        nodeSelector: { pool: monitoring }
+        tolerations: [{ key: pool, operator: Equal, value: monitoring, effect: NoSchedule }]
+        scrapeInterval: 5s                          # short on purpose: we watch a 60 s load test, not a week
+        retention: 2d
+        enableRemoteWriteReceiver: true             # Tempo's metrics generator writes span metrics here
+        # pick up every ServiceMonitor / PodMonitor in the cluster, not only the chart's own
+        serviceMonitorSelectorNilUsesHelmValues: false
+        podMonitorSelectorNilUsesHelmValues: false
+        resources:
+          requests: { cpu: 500m, memory: 1Gi }
+          limits: { memory: 2Gi }
+    grafana:
+      nodeSelector: { pool: monitoring }
+      tolerations: [{ key: pool, operator: Equal, value: monitoring, effect: NoSchedule }]
+      service:
+        type: NodePort
+        nodePort: 30300                             # localhost:3000
+      grafana.ini:
+        auth.anonymous: { enabled: true, org_role: Admin }
+        auth: { disable_login_form: true }
+        dashboards: { default_home_dashboard_path: /tmp/dashboards/ticketrush.json }
+      sidecar:
+        dashboards: { enabled: true, label: grafana_dashboard, searchNamespace: ALL }
+        datasources:
+          defaultDatasourceEnabled: true
+          uid: prometheus                           # the TicketRush dashboard refers to this uid
+      additionalDataSources:
+        - name: Loki
+          uid: loki
+          type: loki
+          url: http://loki.monitoring:3100
+          jsonData:
+            derivedFields:                          # log line → its trace in Tempo
+              - name: traceId
+                datasourceUid: tempo
+                matcherRegex: '\[([0-9a-f]{32})-[0-9a-f]{16}\]'   # Spring Boot logs [traceId-spanId]
+                url: '$${__value.raw}'
+        - name: Tempo
+          uid: tempo
+          type: tempo
+          url: http://tempo.monitoring:3200
+          jsonData:
+            tracesToLogsV2:                         # trace → the log lines of the same request
+              datasourceUid: loki
+              filterByTraceID: true
+              spanStartTimeShift: -5m
+              spanEndTimeShift: 5m
+              customQuery: true
+              query: '{namespace="ticketrush"} |= "$${__trace.traceId}"'
+            tracesToMetrics:
+              datasourceUid: prometheus
+            serviceMap:
+              datasourceUid: prometheus
+            nodeGraph: { enabled: true }

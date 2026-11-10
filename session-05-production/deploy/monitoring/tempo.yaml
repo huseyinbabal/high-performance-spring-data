@@ -1,0 +1,27 @@
+# Tempo, single binary. The app sends spans over OTLP/HTTP to tempo.monitoring:4318.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: tempo
+spec:
+  interval: 30m
+  timeout: 10m
+  chart:
+    spec:
+      chart: tempo
+      version: 1.24.4
+      sourceRef: { kind: HelmRepository, name: grafana }
+  values:
+    fullnameOverride: tempo
+    nodeSelector: { pool: monitoring }
+    tolerations: [{ key: pool, operator: Equal, value: monitoring, effect: NoSchedule }]
+    tempo:
+      retention: 24h
+      receivers:
+        otlp:
+          protocols:
+            grpc: { endpoint: "0.0.0.0:4317" }
+            http: { endpoint: "0.0.0.0:4318" }
+      metricsGenerator:                             # span metrics + service graph → Prometheus
+        enabled: true
+        remoteWriteUrl: http://kps-prometheus.monitoring:9090/api/v1/write

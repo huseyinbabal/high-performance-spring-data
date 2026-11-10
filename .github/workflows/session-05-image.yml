@@ -1,0 +1,73 @@
+# Copied to the repository root (.github/workflows/) when this folder is published.
+# On every push that touches the app: build the jar, build a multi-arch image (amd64 + arm64, so kind on an
+# Apple Silicon laptop can run it), push it to GHCR, then write the new tag into deploy/apps/kustomization.yaml.
+# That commit is what Flux sees — the cluster is never touched by CI.
+name: session-05 image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - session-05-production/src/**
+      - session-05-production/pom.xml
+      - session-05-production/Dockerfile
+  workflow_dispatch:
+
+permissions:
+  contents: write        # commit the new tag
+  packages: write        # push to ghcr.io
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/ticketrush
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: session-05-production
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '27'
+          cache: maven
+
+      - name: Build the jar
+        run: ./mvnw -B -q -DskipTests package
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Short SHA
+        id: tag
+        run: echo "tag=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push (amd64 + arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: session-05-production
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Point the cluster at the new image (Flux picks it up)
+        run: |
+          sed -i "s/^\(    newTag:\).*/\1 ${{ steps.tag.outputs.tag }}/" deploy/apps/kustomization.yaml
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "session-05: deploy ticketrush:${{ steps.tag.outputs.tag }}"
+          git push

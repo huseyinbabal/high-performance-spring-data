@@ -1,0 +1,32 @@
+# TicketRush on kind: 1 control plane + 4 workers in three node pools.
+#   app        ×2  ticketrush-api / ticketrush-worker pods (and Flux)       — no taint
+#   database   ×1  PostgreSQL primary + replica, Redis, Elasticsearch, Kafka — taint pool=database:NoSchedule
+#   monitoring ×1  Prometheus, Grafana, Loki, Tempo                          — taint pool=monitoring:NoSchedule
+# A taint keeps everything else OFF the node; a nodeSelector + toleration puts the right pods ON it.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ticketrush
+nodes:
+  - role: control-plane
+    extraPortMappings:                 # NodePorts are reachable from any node; these map them to localhost
+      - { containerPort: 30080, hostPort: 8088 }   # ticketrush-api
+      - { containerPort: 30300, hostPort: 3000 }   # Grafana
+      - { containerPort: 30909, hostPort: 9091 }   # Prometheus (9090 is often taken)
+  - role: worker
+    labels: { pool: app }
+  - role: worker
+    labels: { pool: app }
+  - role: worker
+    labels: { pool: database }
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          taints: [{ key: pool, value: database, effect: NoSchedule }]
+  - role: worker
+    labels: { pool: monitoring }
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          taints: [{ key: pool, value: monitoring, effect: NoSchedule }]

@@ -1,0 +1,91 @@
+spring:
+  application:
+    name: ticketrush
+  threads:
+    virtual:
+      enabled: ${VIRTUAL_THREADS:true}     # one cheap virtual thread per request; VIRTUAL_THREADS=false for the "before"
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        session_factory.statement_inspector: com.ticketrush.support.SqlCounter
+        jdbc.batch_size: 100
+        order_inserts: true
+        generate_statistics: true          # → hibernate_* metrics (query counts, slowest query, cache)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  cache:
+    type: redis
+  elasticsearch:
+    uris: http://localhost:9200
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      acks: all
+      compression-type: lz4
+      properties:
+        linger.ms: 5
+    consumer:
+      auto-offset-reset: earliest
+      max-poll-records: 500
+
+ticketrush:
+  datasource:
+    primary:                               # every write, and every read that feeds a decision or another store
+      pool-name: primary
+      jdbc-url: jdbc:postgresql://localhost:5442/ticketrush?reWriteBatchedInserts=true
+      username: ticketrush
+      password: ticketrush
+      maximum-pool-size: 10
+      connection-timeout: 3000
+    replica:                               # every @Transactional(readOnly = true)
+      pool-name: replica
+      jdbc-url: jdbc:postgresql://localhost:5441/ticketrush
+      username: ticketrush
+      password: ticketrush
+      maximum-pool-size: 10
+      connection-timeout: 3000
+      read-only: true
+  payment:
+    latency-ms: 150
+  cache:
+    event-ttl: 10m
+  hold:
+    ttl: 2m
+  rate-limit:
+    holds-per-minute: 5
+  outbox:
+    batch-size: 500
+  workers:
+    enabled: true                          # Kafka consumers + outbox relay. On Kubernetes: false in API pods
+  payments:
+    concurrency: 12                        # consumer threads per instance; total across instances ≤ 12 partitions
+
+server:
+  shutdown: graceful                       # finish in-flight requests before the JVM exits
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true                      # /actuator/health/liveness and /readiness for the orchestrator
+      show-details: always
+  metrics:
+    tags:
+      application: ticketrush
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true         # histogram buckets → real p95/p99 in Prometheus, across instances
+
+logging:
+  level:
+    org.hibernate.SQL: ${SQL_LOG:off}
+    org.hibernate.engine.internal.StatisticalLoggingSessionEventListener: off

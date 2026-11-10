@@ -1,0 +1,12 @@
+# Prometheus scrapes every TicketRush pod (api AND worker) — a PodMonitor, because workers have no Service.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ticketrush
+spec:
+  selector:
+    matchLabels: { app: ticketrush }
+  podMetricsEndpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 5s

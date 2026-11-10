@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ticketrush
+data:
+  SPRING_DATA_REDIS_HOST: redis.database
+  SPRING_ELASTICSEARCH_URIS: http://elasticsearch.database:9200
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka.database:9092
+  TICKETRUSH_DATASOURCE_PRIMARY_JDBC_URL: jdbc:postgresql://postgres.database:5432/ticketrush?reWriteBatchedInserts=true
+  TICKETRUSH_DATASOURCE_REPLICA_JDBC_URL: jdbc:postgresql://postgres-replica.database:5432/ticketrush
+  # Pool size is per POD. 3 API pods × (5 + 5) + 3 workers × (5 + 5) = 60 connections — count before you scale.
+  TICKETRUSH_DATASOURCE_PRIMARY_MAXIMUM_POOL_SIZE: "5"
+  TICKETRUSH_DATASOURCE_REPLICA_MAXIMUM_POOL_SIZE: "5"
+  # Traces → Tempo. 10% of requests: enough to find a slow one, cheap enough at 1,700 req/s.
+  MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo.monitoring:4318/v1/traces
+  MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "0.1"
