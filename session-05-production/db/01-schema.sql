@@ -57,6 +57,7 @@ create table outbox (
     message_key  text        not null,
     type         text        not null,
     payload      text        not null,
+    traceparent  text,                   -- W3C trace context of the request that wrote the row (Session 5)
     created_at   timestamptz not null,
     published_at timestamptz
 );

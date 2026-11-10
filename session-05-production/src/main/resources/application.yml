@@ -29,9 +29,18 @@ spring:
       compression-type: lz4
       properties:
         linger.ms: 5
+    listener:
+      observation-enabled: true            # a span per consumed record, child of the record's `traceparent`
     consumer:
       auto-offset-reset: earliest
       max-poll-records: 500
+
+jdbc:                                      # datasource-micrometer: a span per SQL statement (Session 5)
+  includes: query                          # statements only — no connection / result-set spans
+  # wrap only the routing DataSource: the two Hikari pools stay real HikariDataSource beans (pool metrics, config)
+  excluded-data-source-bean-names: primaryDataSource,replicaDataSource
+  datasource-proxy:
+    include-parameter-values: false        # never put customer data into traces
 
 ticketrush:
   datasource:

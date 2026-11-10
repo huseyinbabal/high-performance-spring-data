@@ -25,3 +25,7 @@ spec:
       metricsGenerator:                             # span metrics + service graph → Prometheus
         enabled: true
         remoteWriteUrl: http://kps-prometheus.monitoring:9090/api/v1/write
+      overrides:
+        defaults:
+          metrics_generator:
+            processors: [service-graphs, span-metrics]   # → traces_service_graph_* / traces_spanmetrics_* in Prometheus

@@ -31,10 +31,14 @@ public class OutboxEvent {
 
 	private Instant publishedAt;
 
+	/** W3C trace context of the request that wrote this row: the relay puts it on the Kafka record. */
+	private String traceparent;
+
 	protected OutboxEvent() {
 	}
 
-	public OutboxEvent(String topic, String messageKey, String type, String payload) {
+	public OutboxEvent(String topic, String messageKey, String type, String payload, String traceparent) {
+		this.traceparent = traceparent;
 		this.topic = topic;
 		this.messageKey = messageKey;
 		this.type = type;
@@ -56,6 +60,10 @@ public class OutboxEvent {
 
 	public String getType() {
 		return type;
+	}
+
+	public String getTraceparent() {
+		return traceparent;
 	}
 
 	public String getPayload() {

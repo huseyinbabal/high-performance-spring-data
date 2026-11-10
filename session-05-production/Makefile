@@ -186,6 +186,14 @@ k6-on-sale-k8s: ## Load: 1,000 buyers/s for 1,000 tickets, across all API pods
 k6-showtime-k8s: ## The final load test against the cluster
 	k6 run -q -e BASE=http://$(K8S) -e SCALE=$(or $(SCALE),1) k6/showtime.js
 
+trace: ## One checkout, traced end to end (forced sampling): HTTP → SQL → outbox → Kafka → payment worker → SQL
+	@TP="00-$$(openssl rand -hex 16)-$$(openssl rand -hex 8)-01"; TRACE=$$(echo $$TP | cut -d- -f2); \
+	TOKEN=$$(curl -s -X POST '$(API)/holds' $(JSON) -H "traceparent: $$TP" \
+	  -d "{\"customerId\":$$RANDOM,\"ticketTypeId\":$(or $(TT),777),\"quantity\":1}" | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])"); \
+	curl -s -X POST "$(API)/holds/$$TOKEN/confirm" -H "traceparent: $$TP"; echo; \
+	echo "trace $$TRACE"; \
+	echo "  → http://$(GRAFANA)/explore?schemaVersion=1&panes=%7B%22t%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22queryType%22%3A%22traceql%22%2C%22query%22%3A%22$$TRACE%22%7D%5D%7D%7D"
+
 ## --- The final load test ---
 
 k6-showtime: ## Everything at once for 60 s: listing, event page, search, trending, checkout, price changes   (SCALE=1)

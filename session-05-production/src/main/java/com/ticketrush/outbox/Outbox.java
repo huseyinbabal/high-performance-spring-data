@@ -2,6 +2,10 @@ package com.ticketrush.outbox;
 
 import tools.jackson.databind.json.JsonMapper;
 
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
+
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,9 +18,12 @@ public class Outbox {
 
 	private final JsonMapper json;
 
-	public Outbox(OutboxRepository repository, JsonMapper json) {
+	private final ObjectProvider<Tracer> tracer;
+
+	public Outbox(OutboxRepository repository, JsonMapper json, ObjectProvider<Tracer> tracer) {
 		this.repository = repository;
 		this.json = json;
+		this.tracer = tracer;
 	}
 
 	/**
@@ -26,6 +33,20 @@ public class Outbox {
 	@Transactional(propagation = Propagation.MANDATORY)
 	public void add(String topic, Object key, Object message) {
 		repository.save(new OutboxEvent(topic, String.valueOf(key), message.getClass().getSimpleName(),
-				json.writeValueAsString(message)));
+				json.writeValueAsString(message), traceparent()));
+	}
+
+	/**
+	 * The outbox breaks the trace: the relay publishes later, on its own thread. So the request's trace context
+	 * travels WITH the row (W3C format) and becomes the Kafka record's `traceparent` header — the consumer's span
+	 * then continues the same trace. Only for sampled requests: an unsampled one has nothing in Tempo to join.
+	 */
+	private String traceparent() {
+		Tracer t = tracer.getIfAvailable();
+		Span span = (t == null) ? null : t.currentSpan();
+		if (span == null || !Boolean.TRUE.equals(span.context().sampled())) {
+			return null;
+		}
+		return "00-" + span.context().traceId() + "-" + span.context().spanId() + "-01";
 	}
 }

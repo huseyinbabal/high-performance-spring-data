@@ -61,6 +61,9 @@ public class OutboxRelay {
 			var record = new ProducerRecord<>(e.getTopic(), e.getMessageKey(), e.getPayload());
 			record.headers().add(MESSAGE_ID, String.valueOf(e.getId()).getBytes(StandardCharsets.UTF_8));
 			record.headers().add(MESSAGE_TYPE, e.getType().getBytes(StandardCharsets.UTF_8));
+			if (e.getTraceparent() != null) {          // the consumer continues the trace of the request
+				record.headers().add("traceparent", e.getTraceparent().getBytes(StandardCharsets.UTF_8));
+			}
 			return kafka.send(record);
 		}).toList();
 
