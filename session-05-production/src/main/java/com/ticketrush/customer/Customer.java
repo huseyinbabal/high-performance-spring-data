@@ -13,7 +13,7 @@ public class Customer {
 	// With IDENTITY every row needs its own round trip to learn its id — batching is silently disabled.
 	@Id
 	@GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "customer_seq")
-	@SequenceGenerator(name = "customer_seq", sequenceName = "customer_seq", allocationSize = 75)
+	@SequenceGenerator(name = "customer_seq", sequenceName = "customer_seq", allocationSize = 50)
 	private Long id;
 
 	private String email;
