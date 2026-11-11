@@ -87,6 +87,18 @@ replica-lag: ## How far the replica is behind the primary
 pool: ## HikariCP per pool: active / pending / timeouts
 	@curl -s $(API)/actuator/prometheus | grep -E '^hikaricp_connections(_active|_pending|_timeout_total)' | sed 's/application="ticketrush",//'
 
+sql-log: ## PostgreSQL logs every statement AND every cursor fetch, on both nodes   (S=on|off — turn it off before a load test)
+	@$(PRIMARY) -qtAc "alter system set log_min_duration_statement = $(if $(filter off,$(S)),-1,0)" -c "select pg_reload_conf()" > /dev/null
+	@$(REPLICA) -qtAc "alter system set log_min_duration_statement = $(if $(filter off,$(S)),-1,0)" -c "select pg_reload_conf()" > /dev/null
+	@echo "PostgreSQL statement log: $(if $(filter off,$(S)),off,ON — make pg-log to follow it)"
+
+pg-log: ## Follow the replica's log — run `make export V=v2` in another terminal: 1 execute, then ~1,000 "execute fetch from"
+ifeq ($(ON),k8s)
+	@$(KC) -n database logs -f postgres-replica-0 -c postgres --tail=5 | cut -c1-180
+else
+	@docker compose logs -f --tail=5 --no-log-prefix postgres-replica | cut -c1-180
+endif
+
 ## --- 4 · Observability ---
 
 grafana: ## Open the dashboard (compose: localhost:3001 · ON=k8s: localhost:3000)
